@@ -10,19 +10,18 @@ import Debug.Trace
 data Exp = ATOM Atom
          | PVA VName
          | PVE VName
-         | CONS Exp Exp deriving Eq
+         | CONS Exp Exp deriving (Eq, Show)
 
-instance Show Exp where
-    show (ATOM "Nil") = "[]"
-    show (ATOM name) = name
-    show (PVA name) = "PVA " <> name
-    show (PVE name) = "PVE " <> name
-    show c@(CONS _ _) = "[" <> f c <> "]"
-        where
-          f (CONS x (ATOM "Nil")) = show x
-          f (CONS x xs) = show x <> ", " <> f xs
-          f (ATOM "Nil") = ""
-          f x = show x
+printExp (ATOM "Nil") = "[]"
+printExp (ATOM name) = name
+printExp (PVA name) = "PVA " <> name
+printExp (PVE name) = "PVE " <> name
+printExp c@(CONS _ _) = "[" <> f c <> "]"
+    where
+      f (CONS x (ATOM "Nil")) = printExp x
+      f (CONS x xs) = printExp x <> ", " <> f xs
+      f (ATOM "Nil") = ""
+      f x = printExp x
 
 type Atom  = String
 type AVar  = Exp
@@ -50,7 +49,7 @@ data Cond = EQA' AExp AExp
           | CONS' Exp EVar EVar AVar
           deriving (Eq, Show)
 
-data Bind = Var := Exp deriving Show
+data Bind = Var := Exp
 type Env = [Bind] 
 
 type State = (Term, Env)
@@ -68,7 +67,9 @@ class APPLY a b where (/.) :: a -> b -> a
 instance APPLY Exp Env where
  (ATOM a) /. env = ATOM a
  (CONS h t) /. env = CONS (h /. env) (t /. env)
- var /. env = head [ x | (v := x) <- env, v == var ]
+ var /. env = case [ x | (v := x) <- env, v == var ] of
+                (x:_) -> x
+                _ -> error "empty in /."
 
 instance APPLY a b => APPLY [a] b where
   xs /. y = map (/. y) xs
@@ -78,6 +79,9 @@ class UPDATE a where (+.) :: a -> a -> a
 instance Eq Bind where
   (var1 := _) == (var2 := _) = (var1 == var2)
 
+instance Show Bind where
+  show (x := y) = printExp x <> " := " <> printExp y
+
 instance UPDATE Env where
   binds +. binds' = nub (binds' ++ binds)
 
@@ -85,7 +89,9 @@ mkEnv :: [Var] -> [EVal] -> Env
 mkEnv = zipWith (\var val -> (var := val))
 
 getDef :: FName -> Prog -> FDef
-getDef fn p = head [ fd | fd@(DEFINE f _ _) <- p, f == fn ]
+getDef fn p = case [ fd | fd@(DEFINE f _ _) <- p, f == fn ] of
+                (x:_) -> x
+                _ -> error $ "no such function: " <> fn
 
 -----------
 
