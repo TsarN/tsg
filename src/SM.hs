@@ -25,6 +25,7 @@ data Instr = Push Atom
            | Locals Int
            | GetLocal Int
            | SetLocal Int
+--           | Trace
            deriving (Eq, Show)
 
 data CState = CState { defs :: [FDef]
@@ -302,6 +303,11 @@ compileInstr instr = do
             lv <- gets localVars
             lv' <- listSetIndex lv n val
             modify (\x -> x { localVars = lv' })
+--        Trace -> do
+--            val <- popFromExprStack
+--            oldWrap <- gets compWrap
+--            let newWrap body = oldWrap $ TRACE val body
+--            modify (\x -> x { compWrap = newWrap })
 
 compileSM :: Block  -> Prog
 compileSM block = evalState (compileMain block) initialState

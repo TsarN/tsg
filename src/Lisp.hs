@@ -133,6 +133,9 @@ parseExpr (L [A "set", A var, exp]) = do
     a <- parseExpr exp
     v <- varIdx var
     return $ a ++ [ SetLocal v, Push "Nil" ]
+--parseExpr (L [A "trace", exp]) = do
+--    a <- parseExpr exp
+--    return $ a ++ [ Trace, Push "Nil" ]
 parseExpr (A fn ::: L args) = do
     as <- forM args parseExpr
     return $ concat as ++ [ Call fn ]

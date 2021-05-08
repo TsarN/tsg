@@ -53,6 +53,7 @@ instance Repr Term where
     repr (ALT cond true false) = repr [ATOM "ALT", repr cond, repr true, repr false]
     repr (CALL fname params) = repr [ATOM "CALL", ATOM fname, repr params]
     repr (RETURN exp) = repr [ATOM "RETURN", repr exp]
+--    repr (TRACE exp term) = repr [ATOM "TRACE", repr exp, repr term]
 
 instance Repr Cond where
     repr (EQA' lhs rhs) = repr [ATOM "EQA'", repr lhs, repr rhs]
@@ -65,14 +66,14 @@ tsgInterpSourceCode = [r|
     (uncons source-head DEFINE source-head)
     (uncons source-head entry-point source-head)
     (set map (register-funcs Nil source))
-    (eval-term map Nil (cons CALL (cons entry-point (cons args Nil))))
+    (cons RESULT (eval-term map Nil (cons CALL (cons entry-point (cons args Nil)))))
 ))
 
 (defun eval-term (map env term) (
     (uncons term instr term-tail)
 
     (if (eq instr RETURN) (
-        (uncons term-tail exp term-tail-2)
+        (uncons term-tail exp term-tail)
         (eval-exp env exp)
     ) (
 

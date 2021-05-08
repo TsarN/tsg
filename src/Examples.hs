@@ -11,21 +11,21 @@ match_prog = [
   (DEFINE "NextPos"[e_substring,e_string]
     (ALT (CONS' e_string e__ e_string_tail a__)
       (CALL "Match"[e_substring, e_string_tail])
-      (RETURN _failResURE)
+      (RETURN _FAILURE)
   )),
   (DEFINE "CheckPos" [e_subs,e_str,e_substring,e_string]
     (ALT (CONS' e_subs e_subs_head e_subs_tail a__)
       (ALT (CONS' e_subs_head e__ e__ a_subs_head) 
-           (RETURN _failResURE)
+           (RETURN _FAILURE)
            (ALT (CONS' e_str e_str_head e_str_tail a__)
               (ALT (CONS' e_str_head e__ e__ a_str_head)
-                (RETURN _failResURE)
+                (RETURN _FAILURE)
                 (ALT (EQA' a_subs_head a_str_head)
                   (CALL "CheckPos"[e_subs_tail,e_str_tail,e_substring,e_string])
                   (CALL "NextPos"[e_substring,e_string])
                 )
               )
-              (RETURN _failResURE)
+              (RETURN _FAILURE)
             )
       )
       (RETURN _SUCCESS)
@@ -37,7 +37,6 @@ match_prog = [
         e_string_tail = PVE "e_string_tail"
         e_substring = PVE "substring"
         e__ = PVE "_"
-        e_string-tail = PVE "string-tail"
         a__ = PVA "_"
         e_subs = PVE "subs"
         e_str = PVE "str"
@@ -47,5 +46,5 @@ match_prog = [
         a_str_head = PVA "str_head"
         e_str_head = PVE "str_head"
         e_str_tail = PVE "str_tail"
-        _failResURE = ATOM "_failResURE"
+        _FAILURE = ATOM "_FAILURE"
         _SUCCESS = ATOM "_SUCCESS"
