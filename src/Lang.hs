@@ -10,7 +10,19 @@ import Debug.Trace
 data Exp = ATOM Atom
          | PVA VName
          | PVE VName
-         | CONS Exp Exp deriving (Eq, Show)
+         | CONS Exp Exp deriving Eq
+
+instance Show Exp where
+    show (ATOM "Nil") = "[]"
+    show (ATOM name) = name
+    show (PVA name) = "PVA " <> name
+    show (PVE name) = "PVE " <> name
+    show c@(CONS _ _) = "[" <> f c <> "]"
+        where
+          f (CONS x (ATOM "Nil")) = show x
+          f (CONS x xs) = show x <> ", " <> f xs
+          f (ATOM "Nil") = ""
+          f x = show x
 
 type Atom  = String
 type AVar  = Exp

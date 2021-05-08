@@ -26,8 +26,8 @@ class Repr a where
 instance Repr EVal where
     repr (ATOM a) = ATOM a
     repr (CONS head tail) = CONS (repr head) (repr tail)
-    repr (PVA name) = repr [ATOM "PVA", repr name]
-    repr (PVE name) = repr [ATOM "PVE", repr name]
+    repr (PVA name) = repr [ATOM "PVA", ATOM name]
+    repr (PVE name) = repr [ATOM "PVE", ATOM name]
 
 instance Repr Char where
     repr c = ATOM [c]
@@ -43,11 +43,11 @@ instance (Repr a, Repr b) => Repr (a, b) where
     repr (x, y) = CONS (repr x) (repr y)
 
 instance Repr FDef where
-    repr (DEFINE name params term) = repr [ATOM "DEFINE", repr name, repr params, repr term]
+    repr (DEFINE name params term) = repr [ATOM "DEFINE", ATOM name, repr params, repr term]
 
 instance Repr Term where
     repr (ALT cond true false) = repr [ATOM "ALT", repr cond, repr true, repr false]
-    repr (CALL fname params) = repr [ATOM "CALL", repr fname, repr params]
+    repr (CALL fname params) = repr [ATOM "CALL", ATOM fname, repr params]
     repr (RETURN exp) = repr [ATOM "RETURN", repr exp]
 
 instance Repr Cond where
@@ -64,71 +64,4 @@ examples = [ ATOM "x"
            , repr [ATOM "y", ATOM "Nil", ATOM "x"]
            , repr [ATOM "y", repr [ATOM "z"], ATOM "x"]
            ]
-
-
-util = [ Func "main"
-       , Call "eq"
-       , Return
-
-       , Func "and"
-       , If [ Return ]
-       , Drop, Push "False", Return
-
-       , Func "or"
-       , If [ Drop, Push "True" ]
-       , Return
-
-       , Func "not"
-       , If [ Push "False", Return ]
-       , Push "True"
-       , Return
-
-       , Func "eqa"
-       , Dup
-       , Test
-       , If [ Drop, Drop, Push "False", Return ]
-       , Swap
-       , Dup
-       , Test
-       , If [ Drop, Drop, Push "False", Return ]
-       , Eqa
-       , Return
-
-       , Func "eqe"
-       , Dup
-       , Test
-       , Call "not"
-       , If [ Drop, Drop, Push "False", Return ]
-       , Swap
-       , Dup
-       , Test
-       , Call "not"
-       , If [ Drop, Drop, Push "False", Return ]
-       , Dup2
-       , Split
-       , Swap
-       , Drop
-       , Dup2
-       , Split
-       , Swap
-       , Drop
-       , Call "eq"
-       , Call "not"
-       , If [ Drop, Drop, Push "False", Return ]
-       , Split
-       , Drop
-       , Swap
-       , Split
-       , Drop
-       , Call "eq"
-       , Return
-
-       , Func "eq"
-       , Dup2
-       , Dup2
-       , Call "eqa"
-       , If [ Drop, Drop, Push "True", Return ]
-       , Call "eqe"
-       , Return
-       ]
 

@@ -22,6 +22,9 @@ description:         Please see the README on GitHub at <https://github.com/gith
 dependencies:
 - base >= 4.7 && < 5
 - mtl
+- s-cargot >= 0.1.4.0
+- text
+- parsec
 
 library:
   source-dirs: src
