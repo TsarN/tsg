@@ -6,7 +6,6 @@ import Data.List hiding (uncons)
 import Control.Monad
 import Control.Monad.State
 
-import Debug.Trace
 
 type Block = [Instr]
 
@@ -38,6 +37,7 @@ data CState = CState { defs :: [FDef]
                      , nVars :: Int
                      , compWrap :: Term -> Term
                      , finalized :: Bool
+                     , curInstr :: Instr
                      }
 
 type SMCompiler = State CState
@@ -56,6 +56,7 @@ initialState = CState { defs = []
                       , nVars = 0
                       , compWrap = id
                       , finalized = False
+                      , curInstr = Exit
                       }
 
 getFuncName :: Int -> FName
@@ -122,7 +123,7 @@ freshAVar :: SMCompiler EVar
 freshAVar = PVA <$> freshVarName
 
 compileChunk :: (Chunk, FName) -> SMCompiler ()
-compileChunk ((Chunk clabel block), label) = trace ("compileChunk " <> clabel) $ do
+compileChunk ((Chunk clabel block), label) = do
     when (not $ null label) $ do
         registerDispatch label
     modify (\x -> x { nextLabel = label
@@ -133,20 +134,25 @@ compileChunk ((Chunk clabel block), label) = trace ("compileChunk " <> clabel) $
                     , nVars = 0
                     , compWrap = id
                     , finalized = False
+                    , curInstr = Exit
                     })
     mapM_ compileInstr block
     isFinal <- gets finalized
     unless isFinal $ jmp label
 
-panic :: String -> Term
-panic msg = RETURN (ATOM ("panic: " <> msg))
+panic :: String -> Exp -> SMCompiler Term
+panic msg info = do
+    label <- gets curLabel
+    instr <- gets curInstr
+    return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " in " <> (show instr))) info)
 
 uncons :: Exp -> SMCompiler (Exp, Exp)
 uncons value = do
     oldWrap <- gets compWrap
     car <- freshEVar
     cdr <- freshEVar
-    let newWrap body = oldWrap $ (ALT (CONS' value car cdr (PVA "_")) body (panic "pop from empty list"))
+    p <- panic "uncons on an atom" value
+    let newWrap body = oldWrap $ (ALT (CONS' value car cdr (PVA "_")) body p)
     modify (\x -> x { compWrap = newWrap })
     return (car, cdr)
 
@@ -154,7 +160,8 @@ convertToAVal :: Exp -> SMCompiler AVal
 convertToAVal value = do
     oldWrap <- gets compWrap
     var <- freshAVar
-    let newWrap body = oldWrap $ (ALT (CONS' value (PVE "_") (PVE "_") var) (panic "not an atom") body)
+    p <- panic "not an atom" value
+    let newWrap body = oldWrap $ (ALT (CONS' value (PVE "_") (PVE "_") var) p body)
     modify (\x -> x { compWrap = newWrap })
     return var
 
@@ -251,6 +258,7 @@ listOfNils n = CONS (ATOM "Nil") (listOfNils (n-1))
 
 compileInstr :: Instr -> SMCompiler ()
 compileInstr instr = do
+    modify (\x -> x { curInstr = instr })
     case instr of
         Push atom -> pushToExprStack (ATOM atom)
         Cons -> do

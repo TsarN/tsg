@@ -21,6 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- raw-strings-qq >= 1.1
 - mtl
 - s-cargot >= 0.1.4.0
 - text

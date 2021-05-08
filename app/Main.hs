@@ -1,8 +1,9 @@
 module Main where
 
 import Lisp
+import SM
 
 main :: IO ()
 main = do
     c <- getContents
-    print $ compileLisp c
+    print $ compileSM $ compileLisp c

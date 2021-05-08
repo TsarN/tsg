@@ -102,7 +102,7 @@ int p d = eval s p
                   s = ((CALL f prms), e)
 
 eval :: State -> Prog -> EVal
-eval s@((CALL f args), e) p = trace ("call " <> f <> " " <> (show e')) $ eval s' p
+eval s@((CALL f args), e) p = (if False then trace ("call " <> f <> " " <> (printExp $ PVE "es" /. e')) else id) $ eval s' p
                               where DEFINE _ prms t' = getDef f p
                                     e' = mkEnv prms (args /. e)
                                     s' = (t', e')
