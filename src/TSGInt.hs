@@ -53,7 +53,7 @@ instance Repr Term where
     repr (ALT cond true false) = repr [ATOM "ALT", repr cond, repr true, repr false]
     repr (CALL fname params) = repr [ATOM "CALL", ATOM fname, repr params]
     repr (RETURN exp) = repr [ATOM "RETURN", repr exp]
---    repr (TRACE exp term) = repr [ATOM "TRACE", repr exp, repr term]
+    repr (TRACE exp term) = repr [ATOM "TRACE", repr exp, repr term]
 
 instance Repr Cond where
     repr (EQA' lhs rhs) = repr [ATOM "EQA'", repr lhs, repr rhs]
@@ -62,10 +62,13 @@ instance Repr Cond where
 tsgInterpSourceCode :: String
 tsgInterpSourceCode = [r|
 (defun interpret (source args) (
+    (trace INTERP-START)
     (uncons source source-head source-tail)
     (uncons source-head DEFINE source-head)
     (uncons source-head entry-point source-head)
+    (trace INTERP-REGISTERING-FUNCS)
     (set map (register-funcs Nil source))
+    (trace INTERP-REGISTERED-FUNCS)
     (cons RESULT (eval-term map Nil (cons CALL (cons entry-point (cons args Nil)))))
 ))
 
@@ -75,7 +78,7 @@ tsgInterpSourceCode = [r|
     (if (eq instr RETURN) (
         (uncons term-tail exp term-tail)
         (eval-exp env exp)
-    ) (
+    )
 
     (if (eq instr ALT) (
         (uncons term-tail cond term-tail)
@@ -86,11 +89,12 @@ tsgInterpSourceCode = [r|
             (eval-term map env alt-1)
             (eval-term map env alt-2)
         )
-    ) (
+    )
 
     (if (eq instr CALL) (
         (uncons term-tail func-name term-tail)
         (uncons term-tail func-args term-tail)
+        (trace (cons INTERP-CALL func-name))
         (set func-args (eval-args env func-args))
         (set func-info (map-get map func-name))
         (uncons func-info func-params func-body)
@@ -98,7 +102,14 @@ tsgInterpSourceCode = [r|
         (eval-term map env func-body)
     )
 
-    (panic))))))
+    (if (eq instr TRACE) (
+        (uncons term-tail trace-exp term-tail)
+        (uncons term-tail trace-term term-tail)
+        (trace (cons INTERP-TRACE (eval-exp env trace-exp)))
+        (eval-term map env trace-term)
+    )
+
+    (panic)))))
 ))
 
 (defun pass-params (env args params) (
@@ -157,7 +168,8 @@ tsgInterpSourceCode = [r|
         (uncons defines-head func-name defines-head)
         (uncons defines-head func-args defines-head)
         (uncons defines-head func-body defines-head)
-        (set map (map-set map func-name (cons func-args func-body)))
+        (trace (cons INTERP-REGISTERING-FUNC func-name))
+        (set map (map-set-uniq map func-name (cons func-args func-body)))
         (register-funcs map defines-tail)
     ) map)
 ))
@@ -173,6 +185,10 @@ tsgInterpSourceCode = [r|
 
 (defun map-set (map key value) (
     (set map (map-remove map key))
+    (cons (cons key value) map)
+))
+
+(defun map-set-uniq (map key value) (
     (cons (cons key value) map)
 ))
 
@@ -215,3 +231,9 @@ tsgInterp = compileSM $ compileLisp tsgInterpSourceCode
 
 runTSGInterp :: Prog -> [Exp] -> Exp
 runTSGInterp prog arg = int tsgInterp [repr $ reverse [repr prog, repr $ map repr arg]]
+
+simpleProg :: Prog
+simpleProg = [DEFINE "simple" [] $ RETURN $ ATOM "i am simple"]
+
+selfInterp :: Exp
+selfInterp = runTSGInterp tsgInterp [repr [ATOM "Nil", repr simpleProg]]

@@ -43,7 +43,7 @@ type VName = String
 data Term = ALT Cond Term Term
           | CALL FName [Exp]
           | RETURN Exp
---          | TRACE Exp Term
+          | TRACE Exp Term
           deriving (Eq, Show)
 
 data Cond = EQA' AExp AExp
@@ -113,7 +113,7 @@ eval s@((ALT c t1 t2), e) p = case cond c e of
                                FALSE ue -> eval (t2, e +. ue) p
 
 eval s@(RETURN exp, e) p = exp /. e
---eval s@(TRACE exp t, e) p = trace ("TRACE " <> (printExp (exp /. e))) $ eval (t, e) p
+eval s@(TRACE exp t, e) p = trace ("TRACE " <> (printExp (exp /. e))) $ eval (t, e) p
 
 data CondRes = TRUE Env | FALSE Env
 

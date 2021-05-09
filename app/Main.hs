@@ -1,9 +1,7 @@
 module Main where
 
-import Lisp
-import SM
+import Lang
+import TSGInt
 
 main :: IO ()
-main = do
-    c <- getContents
-    print $ compileSM $ compileLisp c
+main = putStrLn $ printExp selfInterp
