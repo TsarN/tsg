@@ -107,7 +107,7 @@ tsgInterpSourceCode = [r|
     (if (is-cons args) (
         (uncons args args-head args-tail)
         (uncons params params-head params-tail)
-        (set env (map-set env params-head args-head))
+        (set env (cons (cons params-head args-head) env))
         (pass-params env args-tail params-tail)
     ) env)
 ))
@@ -158,11 +158,11 @@ tsgInterpSourceCode = [r|
         (set exp (eval-exp env exp))
         (if (is-cons exp) (
             (uncons exp exp-head exp-tail)
-            (set env (map-set env e-var-1 exp-head))
-            (set env (map-set env e-var-2 exp-tail))
+            (set env (cons (cons e-var-1 exp-head) env))
+            (set env (cons (cons e-var-2 exp-tail) env))
             (cons env True)
         ) (
-            (set env (map-set env a-var exp))
+            (set env (cons (cons a-var exp) env))
             (cons env False)
         ))
     ))
@@ -178,21 +178,6 @@ tsgInterpSourceCode = [r|
         (set map (cons (cons func-name (cons func-args func-body)) map))
         (register-funcs map defines-tail)
     ) map)
-))
-
-(defun map-remove (map key) (
-    (if (is-cons map) (
-        (uncons map map-head map-tail)
-        (uncons map-head map-head-key map-head-value)
-        (if (eq key map-head-key) map-tail 
-            (cons map-head (map-remove map-tail key))
-        )
-    ) map)
-))
-
-(defun map-set (map key value) (
-    (set map (map-remove map key))
-    (cons (cons key value) map)
 ))
 
 (defun map-get (map key) (
