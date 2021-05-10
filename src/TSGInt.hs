@@ -88,19 +88,19 @@ tsgInterpSourceCode = [r|
             (eval-term map env alt-1)
             (eval-term map env alt-2)
         )
-    )
+    ) (
 
-    (if (eq instr CALL) (
-        (uncons term-tail func-name term-tail)
-        (uncons term-tail func-args term-tail)
-        (set func-args (eval-args env func-args))
-        (set func-info (map-get map func-name))
-        (uncons func-info func-params func-body)
-        (set env (pass-params Nil func-args func-params))
-        (eval-term map env func-body)
-    )
+; assume it's CALL 
 
-    (exit INVALID-INSTRUCTION))))
+    (uncons term-tail func-name term-tail)
+    (uncons term-tail func-args term-tail)
+    (set func-args (eval-args env func-args))
+    (set func-info (map-get map func-name))
+    (uncons func-info func-params func-body)
+    (set env (pass-params Nil func-args func-params))
+    (eval-term map env func-body)
+
+    )))
 ))
 
 (defun pass-params (env args params) (
@@ -130,15 +130,15 @@ tsgInterpSourceCode = [r|
         atom
     ) (
 
-    (if (eq exp-head CONS) (
-        (uncons exp-tail car exp-tail)
-        (uncons exp-tail cdr exp-tail)
-        (set car (eval-exp env car))
-        (set cdr (eval-exp env cdr))
-        (cons car cdr)
-    )
+; assume it's CONS
 
-    (exit INVALID-EXPRESSION))))))
+    (uncons exp-tail car exp-tail)
+    (uncons exp-tail cdr exp-tail)
+    (set car (eval-exp env car))
+    (set cdr (eval-exp env cdr))
+    (cons car cdr)
+
+    ))))
 ))
 
 (defun eval-cond (env cond) (

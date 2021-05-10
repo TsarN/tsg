@@ -14,8 +14,10 @@ import Data.Functor.Identity
 
 import qualified Data.Text as T
 
-import Text.Parsec (many1, satisfy, ParsecT)
+import Text.Parsec (many1, satisfy, string, manyTill, newline, anyChar)
+import Text.Parsec.Text (Parser)
 import Data.SCargot
+import Data.SCargot.Parse
 import Data.SCargot.Repr
 import Data.SCargot.Repr.Basic
 
@@ -34,8 +36,11 @@ isAtomChar c = isAlphaNum c
   || c == '=' || c == '!' || c == '?'
   || c == '_' || c == '\''
 
-pToken :: ParsecT T.Text a Identity T.Text
+pToken :: Parser T.Text
 pToken = T.pack <$> many1 (satisfy isAtomChar)
+
+pComment :: Parser ()
+pComment = string ";" *> manyTill anyChar newline *> pure ()
 
 initialState :: LState
 initialState = LState { fname = ""
@@ -45,7 +50,7 @@ initialState = LState { fname = ""
                       }
 
 parseLisp :: String -> Either String [SExpr String]
-parseLisp s = fmap (fmap (fmap T.unpack)) $ decode (mkParser pToken) $ T.pack s
+parseLisp s = fmap (fmap (fmap T.unpack)) $ decode (setComment pComment $ mkParser pToken) $ T.pack s
 
 compileLisp :: String -> [Instr]
 compileLisp s = compileDefs p
