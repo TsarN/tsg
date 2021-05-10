@@ -175,7 +175,7 @@ tsgInterpSourceCode = [r|
         (uncons defines-head func-name defines-head)
         (uncons defines-head func-args defines-head)
         (uncons defines-head func-body defines-head)
-        (set map (map-set-uniq map func-name (cons func-args func-body)))
+        (set map (cons (cons func-name (cons func-args func-body)) map))
         (register-funcs map defines-tail)
     ) map)
 ))
@@ -192,10 +192,6 @@ tsgInterpSourceCode = [r|
 
 (defun map-set (map key value) (
     (set map (map-remove map key))
-    (cons (cons key value) map)
-))
-
-(defun map-set-uniq (map key value) (
     (cons (cons key value) map)
 ))
 
