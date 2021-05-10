@@ -7,10 +7,12 @@ module Lang where
 import Data.List
 import Debug.Trace
 
+import qualified Data.Map.Strict as M
+
 data Exp = ATOM Atom
          | PVA VName
          | PVE VName
-         | CONS Exp Exp deriving (Eq, Show)
+         | CONS Exp Exp deriving (Eq, Show, Ord)
 
 reprList :: [Exp] -> Exp
 reprList = foldr CONS (ATOM "Nil")
@@ -53,8 +55,7 @@ data Cond = EQA' AExp AExp
           | CONS' Exp EVar EVar AVar
           deriving (Eq, Show)
 
-data Bind = Var := Exp
-type Env = [Bind] 
+type Env = M.Map Var Exp
 
 type State = (Term, Env)
 
@@ -71,26 +72,20 @@ class APPLY a b where (/.) :: a -> b -> a
 instance APPLY Exp Env where
  (ATOM a) /. env = ATOM a
  (CONS h t) /. env = CONS (h /. env) (t /. env)
- var /. env = case [ x | (v := x) <- env, v == var ] of
-                (x:_) -> x
-                _ -> error "empty in /."
+ var /. env = case M.lookup var env of
+                Just x -> x
+                Nothing -> error "empty in /."
 
 instance APPLY a b => APPLY [a] b where
   xs /. y = map (/. y) xs
 
 class UPDATE a where (+.) :: a -> a -> a
 
-instance Eq Bind where
-  (var1 := _) == (var2 := _) = (var1 == var2)
-
-instance Show Bind where
-  show (x := y) = printExp x <> " := " <> printExp y
-
 instance UPDATE Env where
-  binds +. binds' = nub (binds' ++ binds)
+  a +. b = M.union b a
 
 mkEnv :: [Var] -> [EVal] -> Env
-mkEnv = zipWith (\var val -> (var := val))
+mkEnv vars vals = M.fromList $ zip vars vals
 
 getDef :: FName -> Prog -> FDef
 getDef fn p = case [ fd | fd@(DEFINE f _ _) <- p, f == fn ] of
@@ -106,7 +101,7 @@ int p d = eval s p
                   s = ((CALL f prms), e)
 
 eval :: State -> Prog -> EVal
-eval s@((CALL f args), e) p = (if False then trace ("call " <> f <> " " <> (show e')) else id) $ eval s' p
+eval s@((CALL f args), e) p = eval s' p
                               where DEFINE _ prms t' = getDef f p
                                     e' = mkEnv prms (args /. e)
                                     s' = (t', e')
@@ -123,11 +118,11 @@ data CondRes = TRUE Env | FALSE Env
 cond :: Cond -> Env -> CondRes
 cond (EQA' x y)         e = let x' = x /. e; y' = y /. e in
                             case (x', y') of
-                               (ATOM a, ATOM b) | a == b -> TRUE  []
-                               (ATOM a, ATOM b)          -> FALSE []
+                               (ATOM a, ATOM b) | a == b -> TRUE  M.empty
+                               (ATOM a, ATOM b)          -> FALSE M.empty
 
 cond (CONS' x vh vt va) e = let x' = x/.e in
                             case x' of
-                                CONS h t -> TRUE  [vh := h, vt := t]
-                                ATOM a   -> FALSE [va := x']
+                                CONS h t -> TRUE  $ M.fromList [(vh, h), (vt, t)]
+                                ATOM a   -> FALSE $ M.fromList [(va, x')]
 
