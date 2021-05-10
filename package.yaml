@@ -26,6 +26,7 @@ dependencies:
 - s-cargot >= 0.1.4.0
 - text
 - parsec
+- containers
 
 library:
   source-dirs: src

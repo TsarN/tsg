@@ -2,10 +2,13 @@ module SM (Block, Instr(..), compileSM, splitIntoChunks) where
 
 import Lang hiding (State)
 
+import Debug.Trace
 import Data.List hiding (uncons)
+import Data.Maybe
 import Control.Monad
 import Control.Monad.State
 
+import qualified Data.Map.Strict as M
 
 type Block = [Instr]
 
@@ -25,20 +28,26 @@ data Instr = Push Atom
            | Locals Int
            | GetLocal Int
            | SetLocal Int
+           | Main [String]
            | Trace
            deriving (Eq, Show)
 
 data CState = CState { defs :: [FDef]
-                     , dispatch :: [FName]
                      , nextLabel :: FName
                      , curLabel :: FName
                      , exprStack :: EVar
                      , callStack :: EVar
-                     , localVars :: EVar
+                     , localVars :: [EVar]
                      , nVars :: Int
                      , compWrap :: Term -> Term
                      , finalized :: Bool
                      , curInstr :: Instr
+                     , curParams :: [Param]
+                     , curLocals :: Int
+                     , funcLocals :: M.Map FName Int
+                     , callSites :: M.Map FName [FName]
+                     , curFunc :: FName
+                     , mainArgs :: [String]
                      }
 
 type SMCompiler = State CState
@@ -48,16 +57,21 @@ data Chunk = Chunk FName Block
 
 initialState :: CState
 initialState = CState { defs = []
-                      , dispatch = []
                       , nextLabel = ""
                       , curLabel = ""
                       , exprStack = ATOM "Nil"
                       , callStack = ATOM "Nil"
-                      , localVars = ATOM "Nil"
+                      , localVars = []
                       , nVars = 0
                       , compWrap = id
                       , finalized = False
                       , curInstr = Exit
+                      , curParams = []
+                      , curLocals = 0
+                      , funcLocals = M.empty
+                      , callSites = M.empty
+                      , curFunc = ""
+                      , mainArgs = []
                       }
 
 getFuncName :: Int -> FName
@@ -66,26 +80,32 @@ getFuncName f = "$" <> (show f)
 registerFunc :: FDef -> SMCompiler ()
 registerFunc f = modify (\x -> x { defs = f:(defs x) })
 
-registerDispatch :: FName -> SMCompiler ()
-registerDispatch f = modify (\x -> x { dispatch = nub $ f:(dispatch x) })
+getFuncLocals :: FName -> SMCompiler Int
+getFuncLocals fname = do
+    locals <- gets funcLocals
+    case M.lookup fname locals of
+      Nothing -> error $ "Calling undefined function " <> fname
+      Just v -> return v
+
+generateCall :: Exp -> Exp -> FName -> SMCompiler Term
+generateCall exprStack callStack fname = do
+    nLocals <- getFuncLocals fname
+    return $ CALL fname ([exprStack, callStack] <> replicate nLocals (ATOM "Nil"))
+
+generateJump :: FName -> SMCompiler Term
+generateJump label = do
+    es <- gets exprStack
+    cs <- gets callStack
+    lv <- gets localVars
+    return $ CALL label $ [es, cs] <> lv
 
 compileMain :: Block -> SMCompiler Prog
 compileMain block = do
-    fname <- compileBlock (block ++ [Label "$exit", Exit])
-    registerDispatch "$exit"
-    generateDispatch
+    void $ compileBlock (block ++ [Label "$exit", Locals 0, Exit])
+    argv <- map PVE <$> gets mainArgs
     fs <- gets defs
-    return $ (DEFINE "$start" [PVE "arg"]
-               (CALL fname [PVE "arg", CONS (CONS (ATOM "$exit") (ATOM "Nil")) (ATOM "Nil"), ATOM "Nil"])
-             ):fs
-
-generateDispatch :: SMCompiler ()
-generateDispatch = do
-    names <- gets dispatch
-    registerFunc $ DEFINE "$dispatch" [PVE "es", PVE "cs", PVE "lv", PVA "f"] $ d names
-  where
-    d [] = (RETURN (ATOM "dispatch failed"))
-    d (x:xs) = (ALT (EQA' (ATOM x) (PVA "f")) (CALL x [PVE "es", PVE "cs", PVE "lv"]) (d xs))
+    call <- generateCall (reprList $ reverse argv) (CONS (CONS (ATOM "$exit") (ATOM "Nil")) (ATOM "Nil")) "main"
+    return $ (DEFINE "$start" argv call):fs
 
 splitIntoChunks :: Block -> [Chunk]
 splitIntoChunks block =
@@ -104,10 +124,27 @@ splitIntoChunks block =
                 CJmp _ -> end
                 _ -> f xs (Chunk clabel (x:cblock)) cnt
 
+registerChunk :: (Chunk, FName) -> SMCompiler ()
+registerChunk ((Chunk clabel block), label) = do
+    case block of
+      (Label _):(Locals n):_ -> modify (\x -> x { curLocals = n })
+      _ -> return ()
+    modify (\x -> x { funcLocals = M.insert clabel (curLocals x) (funcLocals x) })
+    let calls = [label | (Call label) <- block]
+    forM_ calls $ \func -> do
+        modify (\x -> x { callSites = M.alter (\v -> case v of 
+                                                       Nothing -> Just $ [label]
+                                                       Just xs -> Just $ label:xs
+                                              ) func (callSites x)
+                        })
+
 compileBlock :: Block -> SMCompiler FName
 compileBlock block = do
     let chunks = splitIntoChunks block
-    forM_ (zip chunks $ (map (\(Chunk clabel _) -> clabel) $ tail chunks) <> [""]) compileChunk
+    let chunksWithNext = zip chunks $ (map (\(Chunk clabel _) -> clabel) $ tail chunks) <> [""]
+    mapM_ registerChunk chunksWithNext
+    cs <- gets callSites
+    mapM_ compileChunk chunksWithNext
     let (Chunk label _) = head chunks
     return label
 
@@ -125,17 +162,20 @@ freshAVar = PVA <$> freshVarName
 
 compileChunk :: (Chunk, FName) -> SMCompiler ()
 compileChunk ((Chunk clabel block), label) = do
-    when (not $ null label) $ do
-        registerDispatch label
+    modify (\x -> x { nVars = 0} )
+    nLocals <- getFuncLocals clabel
+    exprStackName <- freshEVar
+    callStackName <- freshEVar
+    localNames <- replicateM nLocals freshEVar
     modify (\x -> x { nextLabel = label
                     , curLabel = clabel
-                    , exprStack = PVE "es"
-                    , callStack = PVE "cs"
-                    , localVars = PVE "lv"
-                    , nVars = 0
+                    , exprStack = exprStackName
+                    , callStack = callStackName
+                    , localVars = localNames
                     , compWrap = id
                     , finalized = False
                     , curInstr = Exit
+                    , curParams = [exprStackName, callStackName] <> localNames
                     })
     mapM_ compileInstr block
     isFinal <- gets finalized
@@ -144,8 +184,9 @@ compileChunk ((Chunk clabel block), label) = do
 panic :: String -> Exp -> SMCompiler Term
 panic msg info = do
     label <- gets curLabel
+    func <- gets curFunc
     instr <- gets curInstr
-    return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " in " <> (show instr))) info)
+    return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " (" <> func <> ") in " <> (show instr))) info)
 
 uncons :: Exp -> SMCompiler (Exp, Exp)
 uncons value = do
@@ -172,9 +213,14 @@ pushToExprStack value = modify (\x -> x { exprStack = CONS value (exprStack x) }
 popFromExprStack :: SMCompiler Exp
 popFromExprStack = do
     oldStack <- gets exprStack
-    (val, newStack) <- uncons oldStack
-    modify (\x -> x { exprStack = newStack })
-    return val
+    case oldStack of
+      CONS car cdr -> do
+          modify (\x -> x { exprStack = cdr })
+          return car
+      _ -> do
+          (val, newStack) <- uncons oldStack
+          modify (\x -> x { exprStack = newStack })
+          return val
 
 pushToCallStack :: Exp -> SMCompiler ()
 pushToCallStack value = modify (\x -> x { callStack = CONS value (callStack x) })
@@ -186,76 +232,66 @@ popFromCallStack = do
     modify (\x -> x { callStack = newStack })
     return val
 
-listIndex :: Exp -> Int -> SMCompiler Exp
-listIndex list 0 = do
-    (val, _) <- uncons list
-    return val
-listIndex list n = do
-    (car, cdr) <- uncons list
-    listIndex cdr (n - 1)
-
-listSetIndex :: Exp -> Int -> Exp -> SMCompiler Exp
-listSetIndex list 0 val = do
-    (_, cdr) <- uncons list
-    return $ CONS val cdr
-listSetIndex list n val = do
-    (car, cdr) <- uncons list
-    cdr' <- listSetIndex cdr (n - 1) val
-    return $ CONS car cdr'
-
 setBody :: Term -> SMCompiler ()
 setBody body = do
     wrap <- gets compWrap
     label <- gets curLabel
+    params <- gets curParams
     modify (\x -> x { finalized = True })
-    registerFunc $ DEFINE label [PVE "es", PVE "cs", PVE "lv"] $ wrap body
+    registerFunc $ DEFINE label params $ wrap body
 
-saveLocals :: SMCompiler ()
-saveLocals = do
-    label <- gets nextLabel
+callFunction :: FName -> SMCompiler ()
+callFunction fname = do
     lv <- gets localVars
-    pushToCallStack $ CONS (ATOM label) lv
-    modify (\x -> x { localVars = ATOM "Nil" })
-
-jmp :: FName -> SMCompiler ()
-jmp label = do
+    next <- gets nextLabel
+    pushToCallStack $ CONS (ATOM next) (reprList lv)
     es <- gets exprStack
     cs <- gets callStack
-    lv <- gets localVars
-    setBody $ (CALL label [es, cs, lv])
+    x <- generateCall es cs fname
+    setBody x
+
+jmp :: FName -> SMCompiler ()
+jmp label = generateJump label >>= setBody
 
 cjmp :: FName -> SMCompiler ()
 cjmp label = do
     next <- gets nextLabel
     cond <- popFromExprStack >>= convertToAVal
-    es <- gets exprStack
-    cs <- gets callStack
-    lv <- gets localVars
-    setBody $ (ALT (EQA' cond (ATOM "True"))
-                  (CALL label [es, cs, lv])
-                  (CALL next [es, cs, lv]))
+    jTrue <- generateJump label
+    jFalse <- generateJump next
+    setBody $ ALT (EQA' cond (ATOM "True")) jTrue jFalse
 
+generateDispatch :: AVar -> Exp -> FName -> SMCompiler (Term -> Term)
+generateDispatch returnLabel locals fname = do
+    nLocals <- getFuncLocals fname
+    tmpVars <- replicateM nLocals freshEVar
+    modify (\x -> x { localVars = tmpVars })
+    let t = map (\x -> \body -> ALT (CONS' locals x locals (PVA "_")) body (RETURN (ATOM "failed to pop locals"))) tmpVars
+    call <- generateJump fname
+    let newBody = (foldr (.) id t) call
+    return $ ALT (EQA' returnLabel (ATOM fname)) newBody
 
 returnFromFunction :: SMCompiler ()
 returnFromFunction = do
+    current <- gets curFunc
     (returnLabel, locals) <- popFromCallStack >>= uncons
-    es <- gets exprStack
-    cs <- gets callStack
-    setBody $ (CALL "$dispatch" [es, cs, locals, returnLabel])
+    possibleCallers <- (fromMaybe [] . M.lookup current) <$> gets callSites
+    t <- mapM (generateDispatch returnLabel locals) ("$exit":possibleCallers)
+    setBody $ (foldr (.) id t) (RETURN (ATOM $ "failed to return from " <> current))
 
 condition :: Cond -> SMCompiler ()
 condition cond = do
     next <- gets nextLabel
-    es <- gets exprStack
-    cs <- gets callStack
-    lv <- gets localVars
-    setBody $ (ALT cond 
-                  (CALL next [CONS (ATOM "True") es, cs, lv])
-                  (CALL next [CONS (ATOM "False") es, cs, lv]))
 
-listOfNils :: Int -> Exp
-listOfNils 0 = ATOM "Nil"
-listOfNils n = CONS (ATOM "Nil") (listOfNils (n-1))
+    pushToExprStack $ ATOM "True"
+    jTrue <- generateJump next
+    popFromExprStack
+
+    pushToExprStack $ ATOM "False"
+    jFalse <- generateJump next
+    popFromExprStack
+
+    setBody $ (ALT cond jTrue jFalse)
 
 compileInstr :: Instr -> SMCompiler ()
 compileInstr instr = do
@@ -283,9 +319,7 @@ compileInstr instr = do
             pushToExprStack val
             pushToExprStack val
         Drop -> void $ popFromExprStack
-        Call label -> do
-            saveLocals
-            jmp label
+        Call label -> callFunction label
         Return -> returnFromFunction
         Exit -> do
             val <- popFromExprStack
@@ -293,16 +327,16 @@ compileInstr instr = do
         Label _ -> return ()
         Jmp label -> jmp label
         CJmp label -> cjmp label
-        Locals n -> modify (\x -> x { localVars = listOfNils n })
+        Locals n -> modify (\x -> x { curFunc = (curLabel x) })
         GetLocal n -> do
             lv <- gets localVars
-            val <- listIndex lv n
-            pushToExprStack val
+            pushToExprStack $ lv !! n
         SetLocal n -> do
             val <- popFromExprStack
             lv <- gets localVars
-            lv' <- listSetIndex lv n val
-            modify (\x -> x { localVars = lv' })
+            let (a, b) = splitAt n lv
+            modify (\x -> x { localVars = a <> [val] <> (tail b) })
+        Main argv -> modify (\x -> x { mainArgs = argv })
         Trace -> do
             val <- popFromExprStack
             oldWrap <- gets compWrap

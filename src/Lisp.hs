@@ -73,6 +73,18 @@ freshLabel = do
     modify (\x -> x { nlabels = idx + 1 })
     return $ "$L" <> (show idx)
 
+smartLabel :: Block -> Compiler (String, Block)
+smartLabel block =
+    case block of
+      [] -> do
+          l <- freshLabel
+          return (l, [Label l])
+      _ -> case last block of
+             Label l -> return (l, block)
+             _ -> do
+                 l <- freshLabel
+                 return (l, block ++ [Label l])
+
 varExists :: String -> Compiler Bool
 varExists var = do
     st <- get
@@ -87,7 +99,8 @@ parseDefun (A "defun" ::: A name ::: L params ::: body ::: SNil) = do
     instr <- parseExpr body
     st <- get
     let n = length $ fparams st ++ flocals st
-    return $ [ Label name, Locals n ] ++ [SetLocal n | n <- reverse [0..length params-1]] ++ instr ++ [Return]
+    let prefix = if name == "main" then [Main $ fparams st] else []
+    return $ prefix ++ [ Label name, Locals n ] ++ [SetLocal n | n <- reverse [0..length params-1]] ++ instr ++ [Return]
 parseDefun _ = error "invalid parseDefun"
 
 parseExpr :: SExpr String -> Compiler [Instr]
@@ -96,11 +109,11 @@ parseExpr (L [A "if", cond, tbody, fbody]) = do
     t <- parseExpr tbody
     f <- parseExpr fbody
     trueLabel <- freshLabel
-    endLabel <- freshLabel
-    return $ c ++ [ CJmp trueLabel ] ++ f ++ [ Jmp endLabel, Label trueLabel ] ++ t ++ [ Label endLabel ]
-parseExpr (L [A "return", rv]) = do
+    (endLabel, t') <- smartLabel t
+    return $ c ++ [ CJmp trueLabel ] ++ f ++ [ Jmp endLabel, Label trueLabel ] ++ t'
+parseExpr (L [A "exit", rv]) = do
     a <- parseExpr rv
-    return $ a ++ [ Return ]
+    return $ a ++ [ Exit ]
 parseExpr (L [A "eqa", lhs, rhs]) = do
     l <- parseExpr lhs
     r <- parseExpr rhs
@@ -109,24 +122,19 @@ parseExpr (L [A "cons", lhs, rhs]) = do
     l <- parseExpr lhs
     r <- parseExpr rhs
     return $ r ++ l ++ [ Cons ]
+parseExpr (L [A "is-cons", arg]) = do
+    a <- parseExpr arg
+    return $ a ++ [ Test ]
 parseExpr (L [A "uncons", arg, A headVar, A tailVar]) = do
     a <- parseExpr arg
     h <- varIdx headVar
     t <- varIdx tailVar
     isCons <- freshLabel
     endLabel <- freshLabel
-    return $ a ++ [ Dup
-                  , Test
-                  , CJmp isCons
-                  , Drop
-                  , Push "False"
-                  , Jmp endLabel
-                  , Label isCons
-                  , Split
+    return $ a ++ [ Split
                   , SetLocal h
                   , SetLocal t
-                  , Push "True"
-                  , Label endLabel
+                  , Push "Nil"
                   ]
 parseExpr (L [A "set", A var, exp]) = do
     a <- parseExpr exp

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 16f1106cd42b41b3f8f62b7e84abeb353d01b9a9d7e7e41a8ccb3911ab7f707a
+-- hash: 5058145cdc22c38cf364db24163c5cd4704f3e2d66f4e084273e5b180d6f41cf
 
 name:           tsg
 version:        0.1.0.0
@@ -38,6 +38,7 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , containers
     , mtl
     , parsec
     , raw-strings-qq >=1.1
@@ -54,6 +55,7 @@ executable tsg-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , mtl
     , parsec
     , raw-strings-qq >=1.1
@@ -72,6 +74,7 @@ test-suite tsg-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , containers
     , mtl
     , parsec
     , raw-strings-qq >=1.1

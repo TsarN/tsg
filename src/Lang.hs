@@ -12,6 +12,9 @@ data Exp = ATOM Atom
          | PVE VName
          | CONS Exp Exp deriving (Eq, Show)
 
+reprList :: [Exp] -> Exp
+reprList = foldr CONS (ATOM "Nil")
+
 printExp (ATOM "Nil") = "[]"
 printExp (ATOM name) = name
 printExp (PVA name) = "PVA " <> name
@@ -103,7 +106,7 @@ int p d = eval s p
                   s = ((CALL f prms), e)
 
 eval :: State -> Prog -> EVal
-eval s@((CALL f args), e) p = (if False then trace ("call " <> f <> " " <> (printExp $ PVE "es" /. e')) else id) $ eval s' p
+eval s@((CALL f args), e) p = (if False then trace ("call " <> f <> " " <> (show e')) else id) $ eval s' p
                               where DEFINE _ prms t' = getDef f p
                                     e' = mkEnv prms (args /. e)
                                     s' = (t', e')
