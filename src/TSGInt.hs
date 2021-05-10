@@ -60,7 +60,6 @@ instance Repr Cond where
 tsgInterpSourceCode :: String
 tsgInterpSourceCode = [r|
 (defun main (source args) (
-    (trace (cons INTERP-START args))
     (uncons source source-head source-tail)
     (uncons source-head DEFINE source-head)
     (uncons source-head func-name source-head)
@@ -69,8 +68,7 @@ tsgInterpSourceCode = [r|
 
     (set map (register-funcs Nil source))
     (set env (pass-params Nil args func-params))
-    (trace INTERP-START)
-    (cons RESULT (eval-term map env func-body))
+    (eval-term map env func-body)
 ))
 
 (defun eval-term (map env term) (
@@ -96,21 +94,13 @@ tsgInterpSourceCode = [r|
         (uncons term-tail func-name term-tail)
         (uncons term-tail func-args term-tail)
         (set func-args (eval-args env func-args))
-        (trace (cons INTERP-CALL func-name))
         (set func-info (map-get map func-name))
         (uncons func-info func-params func-body)
         (set env (pass-params Nil func-args func-params))
         (eval-term map env func-body)
     )
 
-    (if (eq instr TRACE) (
-        (uncons term-tail trace-exp term-tail)
-        (uncons term-tail trace-term term-tail)
-        (trace (cons INTERP-TRACE (eval-exp env trace-exp)))
-        (eval-term map env trace-term)
-    )
-
-    (exit INVALID-INSTRUCTION)))))
+    (exit INVALID-INSTRUCTION))))
 ))
 
 (defun pass-params (env args params) (
@@ -185,7 +175,6 @@ tsgInterpSourceCode = [r|
         (uncons defines-head func-name defines-head)
         (uncons defines-head func-args defines-head)
         (uncons defines-head func-body defines-head)
-        (trace (cons INTERP-REGISTERING-FUNC func-name))
         (set map (map-set-uniq map func-name (cons func-args func-body)))
         (register-funcs map defines-tail)
     ) map)
