@@ -3,5 +3,7 @@ module Main where
 import Lang
 import TSGInt
 
+import qualified Data.Text as T
+
 main :: IO ()
-main = putStrLn $ printExp selfInterp
+main = putStrLn $ T.unpack $ printExp selfInterp

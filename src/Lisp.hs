@@ -21,9 +21,9 @@ import Data.SCargot.Parse
 import Data.SCargot.Repr
 import Data.SCargot.Repr.Basic
 
-data LState = LState { fname :: String
-                     , fparams :: [String]
-                     , flocals :: [String]
+data LState = LState { fname :: T.Text
+                     , fparams :: [T.Text]
+                     , flocals :: [T.Text]
                      , nlabels :: Int
                      }
 
@@ -49,19 +49,19 @@ initialState = LState { fname = ""
                       , nlabels = 0
                       }
 
-parseLisp :: String -> Either String [SExpr String]
-parseLisp s = fmap (fmap (fmap T.unpack)) $ decode (setComment pComment $ mkParser pToken) $ T.pack s
+parseLisp :: T.Text -> Either String [SExpr T.Text]
+parseLisp = decode (setComment pComment $ mkParser pToken)
 
-compileLisp :: String -> [Instr]
+compileLisp :: T.Text -> [Instr]
 compileLisp s = compileDefs p
     where p = case parseLisp s of
                 Left err -> error err
                 Right x -> x
 
-compileDefs :: [SExpr String] -> [Instr]
+compileDefs :: [SExpr T.Text] -> [Instr]
 compileDefs src = concat $ evalState (mapM parseDefun src) initialState
 
-varIdx :: String -> Compiler Int
+varIdx :: T.Text -> Compiler Int
 varIdx var = do
     st <- get
     case elemIndex var (fparams st) of
@@ -72,13 +72,13 @@ varIdx var = do
                        modify (\x -> x { flocals = flocals x ++ [var] })
                        return $ length $ flocals st ++ fparams st
 
-freshLabel :: Compiler String
+freshLabel :: Compiler T.Text
 freshLabel = do
     idx <- gets nlabels
     modify (\x -> x { nlabels = idx + 1 })
-    return $ "$L" <> (show idx)
+    return $ "$L" <> (T.pack $ show idx)
 
-smartLabel :: Block -> Compiler (String, Block)
+smartLabel :: Block -> Compiler (T.Text, Block)
 smartLabel block =
     case block of
       [] -> do
@@ -90,12 +90,12 @@ smartLabel block =
                  l <- freshLabel
                  return (l, block ++ [Label l])
 
-varExists :: String -> Compiler Bool
+varExists :: T.Text -> Compiler Bool
 varExists var = do
     st <- get
     return $ var `elem` (fparams st ++ flocals st)
 
-parseDefun :: SExpr String -> Compiler [Instr]
+parseDefun :: SExpr T.Text -> Compiler [Instr]
 parseDefun (A "defun" ::: A name ::: L params ::: body ::: SNil) = do
     modify (\x -> x { fname = name
                     , fparams = [p | A p <- params]
@@ -108,7 +108,7 @@ parseDefun (A "defun" ::: A name ::: L params ::: body ::: SNil) = do
     return $ prefix ++ [ Label name, Locals n ] ++ [SetLocal n | n <- reverse [0..length params-1]] ++ instr ++ [Return]
 parseDefun _ = error "invalid parseDefun"
 
-parseExpr :: SExpr String -> Compiler [Instr]
+parseExpr :: SExpr T.Text -> Compiler [Instr]
 parseExpr (L [A "if", cond, tbody, fbody]) = do
     c <- parseExpr cond
     t <- parseExpr tbody

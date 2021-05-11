@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module TSGInt where
 
@@ -9,6 +10,7 @@ import Lang
 import SM
 import Lisp
 
+import qualified Data.Text as T
 import Text.RawString.QQ (r)
 
 -- Following data structures have representation at runtime:
@@ -32,10 +34,10 @@ instance Repr EVal where
     repr (PVE name) = reprList [ATOM "PVE", ATOM name]
 
 instance Repr Char where
-    repr c = ATOM [c]
+    repr c = ATOM $ T.pack [c]
 
 instance Repr Bool where
-    repr b = ATOM (show b)
+    repr b = ATOM (T.pack $ show b)
 
 instance Repr a => Repr [a] where
     repr [] = ATOM "Nil"
@@ -57,8 +59,8 @@ instance Repr Cond where
     repr (EQA' lhs rhs) = reprList [ATOM "EQA'", repr lhs, repr rhs]
     repr (CONS' exp lhs rhs a) = reprList [ATOM "CONS'", repr exp, repr lhs, repr rhs, repr a]
 
-tsgInterpSourceCode :: String
-tsgInterpSourceCode = [r|
+tsgInterpSourceCode :: T.Text
+tsgInterpSourceCode = T.pack [r|
 (defun main (source args) (
     (uncons source source-head source-tail)
     (uncons source-head DEFINE source-head)

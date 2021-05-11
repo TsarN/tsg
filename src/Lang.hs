@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -7,6 +8,7 @@ module Lang where
 import Data.List
 import Debug.Trace
 
+import qualified Data.Text as T
 import qualified Data.Map.Strict as M
 
 data Exp = ATOM Atom
@@ -28,7 +30,7 @@ printExp c@(CONS _ _) = "[" <> f c <> "]"
       f (ATOM "Nil") = ""
       f x = printExp x
 
-type Atom  = String
+type Atom  = T.Text
 type AVar  = Exp
 type EVar  = Exp
 type Param = Exp
@@ -39,11 +41,13 @@ type Var   = Exp
 
 type Prog = [FDef]
 
+type FastProg = M.Map FName FDef
+
 data FDef = DEFINE FName [Param] Term
     deriving (Eq, Show)
 
-type FName = String
-type VName = String
+type FName = T.Text
+type VName = T.Text
 
 data Term = ALT Cond Term Term
           | CALL FName [Exp]
@@ -87,20 +91,23 @@ instance UPDATE Env where
 mkEnv :: [Var] -> [EVal] -> Env
 mkEnv vars vals = M.fromList $ zip vars vals
 
-getDef :: FName -> Prog -> FDef
-getDef fn p = case [ fd | fd@(DEFINE f _ _) <- p, f == fn ] of
-                (x:_) -> x
-                _ -> error $ "no such function: " <> fn
+getDef :: FName -> FastProg -> FDef
+getDef fn p = case M.lookup fn p of
+                Just x -> x
+                Nothing -> error $ "no such function: " <> (T.unpack fn)
+
+mkFastProg :: Prog -> FastProg
+mkFastProg prog = M.fromList [ (name, def) | def@(DEFINE name _ _) <- prog]
 
 -----------
 
 int :: Prog -> [EVal] -> EVal
-int p d = eval s p
+int p d = eval s (mkFastProg p)
             where (DEFINE f prms _) : p' = p
                   e = mkEnv prms d
                   s = ((CALL f prms), e)
 
-eval :: State -> Prog -> EVal
+eval :: State -> FastProg -> EVal
 eval s@((CALL f args), e) p = eval s' p
                               where DEFINE _ prms t' = getDef f p
                                     e' = mkEnv prms (args /. e)
@@ -111,7 +118,7 @@ eval s@((ALT c t1 t2), e) p = case cond c e of
                                FALSE ue -> eval (t2, e +. ue) p
 
 eval s@(RETURN exp, e) p = exp /. e
-eval s@(TRACE exp t, e) p = trace ("TRACE " <> (printExp (exp /. e))) $ eval (t, e) p
+eval s@(TRACE exp t, e) p = trace (T.unpack $ "TRACE " <> (printExp (exp /. e))) $ eval (t, e) p
 
 data CondRes = TRUE Env | FALSE Env
 

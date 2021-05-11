@@ -1,7 +1,10 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module SM (Block, Instr(..), compileSM, splitIntoChunks) where
 
 import Lang hiding (State)
 
+import qualified Data.Text as T
 import Debug.Trace
 import Data.List hiding (uncons)
 import Data.Maybe
@@ -28,7 +31,7 @@ data Instr = Push Atom
            | Locals Int
            | GetLocal Int
            | SetLocal Int
-           | Main [String]
+           | Main [T.Text]
            | Trace
            deriving (Eq, Show)
 
@@ -47,7 +50,7 @@ data CState = CState { defs :: [FDef]
                      , funcLocals :: M.Map FName Int
                      , callSites :: M.Map FName [FName]
                      , curFunc :: FName
-                     , mainArgs :: [String]
+                     , mainArgs :: [T.Text]
                      }
 
 type SMCompiler = State CState
@@ -75,7 +78,7 @@ initialState = CState { defs = []
                       }
 
 getFuncName :: Int -> FName
-getFuncName f = "$" <> (show f)
+getFuncName f = "$" <> (T.pack $ show f)
 
 registerFunc :: FDef -> SMCompiler ()
 registerFunc f = modify (\x -> x { defs = f:(defs x) })
@@ -84,7 +87,7 @@ getFuncLocals :: FName -> SMCompiler Int
 getFuncLocals fname = do
     locals <- gets funcLocals
     case M.lookup fname locals of
-      Nothing -> error $ "Calling undefined function " <> fname
+      Nothing -> error $ T.unpack $ "Calling undefined function " <> fname
       Just v -> return v
 
 generateCall :: Exp -> Exp -> FName -> SMCompiler Term
@@ -115,7 +118,7 @@ splitIntoChunks block =
     where
       f [] cur _ = [cur]
       f (x:xs) cur@(Chunk clabel cblock) cnt =
-          let end = (Chunk clabel (x:cblock)):(f xs (Chunk ("$R" <> (show cnt)) []) (cnt + 1)) in
+          let end = (Chunk clabel (x:cblock)):(f xs (Chunk ("$R" <> (T.pack $ show cnt)) []) (cnt + 1)) in
               case x of
                 Label label -> cur:(f xs (Chunk label [x]) cnt)
                 Call _ -> end
@@ -152,7 +155,7 @@ freshVarName :: SMCompiler VName
 freshVarName = do
     n <- gets nVars
     modify (\x -> x { nVars = n + 1 })
-    return $ "!" <> (show n)
+    return $ "!" <> (T.pack  $ show n)
 
 freshEVar :: SMCompiler EVar
 freshEVar = PVE <$> freshVarName
@@ -181,12 +184,12 @@ compileChunk ((Chunk clabel block), label) = do
     isFinal <- gets finalized
     unless isFinal $ jmp label
 
-panic :: String -> Exp -> SMCompiler Term
+panic :: T.Text -> Exp -> SMCompiler Term
 panic msg info = do
     label <- gets curLabel
     func <- gets curFunc
     instr <- gets curInstr
-    return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " (" <> func <> ") in " <> (show instr))) info)
+    return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " (" <> func <> ") in " <> (T.pack $ show instr))) info)
 
 uncons :: Exp -> SMCompiler (Exp, Exp)
 uncons value = do
