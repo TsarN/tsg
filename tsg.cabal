@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5058145cdc22c38cf364db24163c5cd4704f3e2d66f4e084273e5b180d6f41cf
+-- hash: 92bcd2249b5cb17a8494b86470e698d7c905f59fc60b80353d63132120250151
 
 name:           tsg
 version:        0.1.0.0
@@ -32,6 +32,7 @@ library
       Lisp
       SM
       TSGInt
+      Ura
   other-modules:
       Paths_tsg
   hs-source-dirs:

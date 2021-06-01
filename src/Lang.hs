@@ -6,6 +6,7 @@
 module Lang where
 
 import Data.List
+import Data.Maybe
 import Debug.Trace
 
 import qualified Data.Text as T
@@ -14,6 +15,8 @@ import qualified Data.Map.Strict as M
 data Exp = ATOM Atom
          | PVA VName
          | PVE VName
+         | CVA Int
+         | CVE Int
          | CONS Exp Exp deriving (Eq, Show, Ord)
 
 reprList :: [Exp] -> Exp
@@ -23,6 +26,8 @@ printExp (ATOM "Nil") = "[]"
 printExp (ATOM name) = name
 printExp (PVA name) = "PVA " <> name
 printExp (PVE name) = "PVE " <> name
+printExp (CVA name) = "CVA " <> T.pack (show name)
+printExp (CVE name) = "CVE " <> T.pack (show name)
 printExp c@(CONS _ _) = "[" <> f c <> "]"
     where
       f (CONS x (ATOM "Nil")) = printExp x
@@ -38,6 +43,15 @@ type AVal  = Exp
 type EVal  = Exp
 type AExp  = Exp
 type Var   = Exp
+type CVar  = Exp
+type CVal  = Exp
+type CExp  = Exp
+type CEVar = Exp
+type CEVal = Exp
+type CEExp = Exp
+type CAVar = Exp
+type CAVal = Exp
+type CAExp = Exp
 
 type Prog = [FDef]
 
@@ -74,11 +88,9 @@ id_prog = [
 class APPLY a b where (/.) :: a -> b -> a
 
 instance APPLY Exp Env where
- (ATOM a) /. env = ATOM a
- (CONS h t) /. env = CONS (h /. env) (t /. env)
- var /. env = case M.lookup var env of
-                Just x -> x
-                Nothing -> error "empty in /."
+    (ATOM a) /. s = ATOM a
+    (CONS h t) /. s = CONS (h /. s) (t /. s)
+    cvar /. s = fromMaybe cvar $ M.lookup cvar s
 
 instance APPLY a b => APPLY [a] b where
   xs /. y = map (/. y) xs

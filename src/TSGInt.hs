@@ -32,6 +32,7 @@ instance Repr EVal where
     repr (CONS head tail) = reprList [ATOM "CONS", repr head, repr tail]
     repr (PVA name) = reprList [ATOM "PVA", ATOM name]
     repr (PVE name) = reprList [ATOM "PVE", ATOM name]
+    repr _ = undefined
 
 instance Repr Char where
     repr c = ATOM $ T.pack [c]
@@ -63,14 +64,16 @@ tsgInterpSourceCode :: T.Text
 tsgInterpSourceCode = T.pack [r|
 (defun main (source args) (
     (uncons source source-head source-tail)
-    (uncons source-head DEFINE source-head)
-    (uncons source-head func-name source-head)
-    (uncons source-head func-params source-head)
-    (uncons source-head func-body source-head)
+    (uncons source-head should-be-define source-head)
+    (if (eq should-be-define DEFINE) (
+      (uncons source-head func-name source-head)
+      (uncons source-head func-params source-head)
+      (uncons source-head func-body source-head)
 
-    (set map (register-funcs Nil source))
-    (set env (pass-params Nil args func-params))
-    (eval-term map env func-body)
+      (set map (register-funcs Nil source))
+      (set env (pass-params Nil args func-params))
+      (eval-term map env func-body)
+    ) (exit FAIL))
 ))
 
 (defun eval-term (map env term) (
@@ -90,19 +93,17 @@ tsgInterpSourceCode = T.pack [r|
             (eval-term map env alt-1)
             (eval-term map env alt-2)
         )
-    ) (
+    )
 
-; assume it's CALL 
-
-    (uncons term-tail func-name term-tail)
-    (uncons term-tail func-args term-tail)
-    (set func-args (eval-args env func-args))
-    (set func-info (map-get map func-name))
-    (uncons func-info func-params func-body)
-    (set env (pass-params Nil func-args func-params))
-    (eval-term map env func-body)
-
-    )))
+    (if (eq instr CALL) (
+      (uncons term-tail func-name term-tail)
+      (uncons term-tail func-args term-tail)
+      (set func-args (eval-args env func-args))
+      (set func-info (map-get map func-name))
+      (uncons func-info func-params func-body)
+      (set env (pass-params Nil func-args func-params))
+      (eval-term map env func-body)
+    ) (exit FAIL))))
 ))
 
 (defun pass-params (env args params) (
@@ -125,22 +126,20 @@ tsgInterpSourceCode = T.pack [r|
     (uncons exp exp-head exp-tail)
     (if (if (eq exp-head PVA) True (eq exp-head PVE)) (
         (map-get env exp)
-    ) (
+    )
 
     (if (eq exp-head ATOM) (
         (uncons exp-tail atom exp-tail)
-        atom
-    ) (
+        (if (is-cons atom) (exit FAIL) atom)
+    )
 
-; assume it's CONS
-
-    (uncons exp-tail car exp-tail)
-    (uncons exp-tail cdr exp-tail)
-    (set car (eval-exp env car))
-    (set cdr (eval-exp env cdr))
-    (cons car cdr)
-
-    ))))
+    (if (eq exp-head CONS) (
+      (uncons exp-tail car exp-tail)
+      (uncons exp-tail cdr exp-tail)
+      (set car (eval-exp env car))
+      (set cdr (eval-exp env cdr))
+      (cons car cdr)
+    ) (exit FAIL))))
 ))
 
 (defun eval-cond (env cond) (
@@ -152,7 +151,9 @@ tsgInterpSourceCode = T.pack [r|
         (set lhs (eval-exp env lhs))
         (set rhs (eval-exp env rhs))
         (cons env (eq lhs rhs))
-    ) (
+    )
+
+    (if (eq kind CONS') (
         (uncons cond-tail exp cond-tail)
         (uncons cond-tail e-var-1 cond-tail)
         (uncons cond-tail e-var-2 cond-tail)
@@ -167,8 +168,8 @@ tsgInterpSourceCode = T.pack [r|
             (set env (cons (cons a-var exp) env))
             (cons env False)
         ))
-    ))
-))
+    ) (exit FAIL))
+)))
 
 (defun register-funcs (map defines) (
     (if (is-cons defines) (
