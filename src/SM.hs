@@ -6,7 +6,7 @@ import Lang hiding (State)
 
 import qualified Data.Text as T
 import Debug.Trace
-import Data.List hiding (uncons)
+import Data.List
 import Data.Maybe
 import Control.Monad
 import Control.Monad.State
@@ -191,12 +191,13 @@ panic msg info = do
     instr <- gets curInstr
     return $ RETURN (CONS (ATOM ("panic: " <> msg <> " in " <> label <> " (" <> func <> ") in " <> (T.pack $ show instr))) info)
 
-uncons :: Exp -> SMCompiler (Exp, Exp)
-uncons value = do
+unCons :: Exp -> SMCompiler (Exp, Exp)
+unCons (CONS car cdr) = return (car, cdr)
+unCons value = do
     oldWrap <- gets compWrap
     car <- freshEVar
     cdr <- freshEVar
-    p <- panic "uncons on an atom" value
+    p <- panic "unCons on an atom" value
     let newWrap body = oldWrap $ (ALT (CONS' value car cdr (PVA "_")) body p)
     modify (\x -> x { compWrap = newWrap })
     return (car, cdr)
@@ -216,14 +217,9 @@ pushToExprStack value = modify (\x -> x { exprStack = CONS value (exprStack x) }
 popFromExprStack :: SMCompiler Exp
 popFromExprStack = do
     oldStack <- gets exprStack
-    case oldStack of
-      CONS car cdr -> do
-          modify (\x -> x { exprStack = cdr })
-          return car
-      _ -> do
-          (val, newStack) <- uncons oldStack
-          modify (\x -> x { exprStack = newStack })
-          return val
+    (val, newStack) <- unCons oldStack
+    modify (\x -> x { exprStack = newStack })
+    return val
 
 pushToCallStack :: Exp -> SMCompiler ()
 pushToCallStack value = modify (\x -> x { callStack = CONS value (callStack x) })
@@ -231,7 +227,7 @@ pushToCallStack value = modify (\x -> x { callStack = CONS value (callStack x) }
 popFromCallStack :: SMCompiler Exp
 popFromCallStack = do
     oldStack <- gets callStack
-    (val, newStack) <- uncons oldStack
+    (val, newStack) <- unCons oldStack
     modify (\x -> x { callStack = newStack })
     return val
 
@@ -277,7 +273,7 @@ generateDispatch returnLabel locals fname = do
 returnFromFunction :: SMCompiler ()
 returnFromFunction = do
     current <- gets curFunc
-    (returnLabel, locals) <- popFromCallStack >>= uncons
+    (returnLabel, locals) <- popFromCallStack >>= unCons
     possibleCallers <- (fromMaybe [] . M.lookup current) <$> gets callSites
     t <- mapM (generateDispatch returnLabel locals) ("$exit":possibleCallers)
     setBody $ (foldr (.) id t) (RETURN (ATOM $ "failed to return from " <> current))
@@ -307,7 +303,7 @@ compileInstr instr = do
             pushToExprStack (CONS car cdr)
         Split -> do
             val <- popFromExprStack
-            (car, cdr) <- uncons val
+            (car, cdr) <- unCons val
             pushToExprStack cdr
             pushToExprStack car
         Test -> do
